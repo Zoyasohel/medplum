@@ -1,21 +1,24 @@
-import type { ReleaseManifest } from '@medplum/core';
+import type { VersionsManifest } from '@medplum/core';
 
-export function mockFetchForUpgrader(version?: string): jest.SpyInstance {
+export function mockFetchForUpgrader(): jest.SpyInstance {
   let count = 0;
 
   const manifest = {
-    tag_name: `v${version ?? '3.1.6'}`,
-    assets: [
-      {
-        name: `medplum-agent-${version ?? '3.1.6'}-linux'`,
-        browser_download_url: 'https://example.com/linux',
-      },
-      {
-        name: `medplum-agent-installer-${version ?? '3.1.6'}-windows.exe`,
-        browser_download_url: 'https://example.com/win32',
-      },
-    ],
-  } satisfies ReleaseManifest;
+    versions: ['3.1.6', '3.1.5'].map((version) => ({
+      version,
+      tag_name: `v${version}`,
+      assets: [
+        {
+          name: `medplum-agent-${version}-linux'`,
+          browser_download_url: 'https://example.com/linux',
+        },
+        {
+          name: `medplum-agent-installer-${version}-windows.exe`,
+          browser_download_url: 'https://example.com/win32',
+        },
+      ],
+    })),
+  } satisfies VersionsManifest;
 
   return jest.spyOn(globalThis, 'fetch').mockImplementation(
     jest.fn(async () => {

@@ -1,16 +1,31 @@
+import { MEDPLUM_VERSION } from './client';
 import { normalizeErrorString } from './outcomes';
 
-export const GITHUB_RELEASES_URL = 'https://api.github.com/repos/medplum/medplum/releases';
+export const MEDPLUM_VERSIONS_URL = 'https://meta.medplum.com/versions.json';
 
-export type ReleaseManifest = { tag_name: string; assets: { name: string; browser_download_url: string }[] };
+export type ReleaseManifest = {
+  version: string;
+  tag_name: string;
+  assets: { name: string; browser_download_url: string }[];
+};
 
-const releaseManifests = new Map<string, ReleaseManifest>();
+export type VersionsManifest = { versions: ReleaseManifest[] };
 
 /**
- * Clears the locally-cached `ReleaseManifest`s for all versions.
+ * Asserts that a given candidate is a `VersionsManifest`.
+ * @param candidate - An object assumed to be a `VersionsManifest`.
  */
-export function clearReleaseCache(): void {
-  releaseManifests.clear();
+export function assertVersionsManifest(candidate: unknown): asserts candidate is VersionsManifest {
+  if (!candidate || typeof candidate !== 'object') {
+    throw new Error('Versions manifest is not an object');
+  }
+  const versions = (candidate as VersionsManifest).versions;
+  if (!versions || !Array.isArray(versions)) {
+    throw new Error('Versions manifest missing versions list');
+  }
+  for (const version of versions) {
+    assertReleaseManifest(version);
+  }
 }
 
 /**
@@ -37,34 +52,42 @@ export function assertReleaseManifest(candidate: unknown): asserts candidate is 
 }
 
 /**
+ * Fetches the versions manifest.
+ * @param source - The source application tag for analytics purposes ("agent", "cli", "server", etc).
+ * @returns - The versions manifest.
+ */
+export async function fetchVersionsManifest(source: string): Promise<VersionsManifest> {
+  const url = new URL(MEDPLUM_VERSIONS_URL);
+  url.searchParams.set('v', MEDPLUM_VERSION);
+  url.searchParams.set('s', source);
+  const res = await fetch(url.toString());
+  if (res.status !== 200) {
+    let message: string | undefined;
+    try {
+      message = ((await res.json()) as { message: string }).message;
+    } catch (err) {
+      console.error(`Failed to parse message from body: ${normalizeErrorString(err)}`);
+    }
+    throw new Error(`Received status code ${res.status} while fetching versions manifest. Message: ${message}`);
+  }
+  const response = await res.json();
+  assertVersionsManifest(response);
+  return response;
+}
+
+/**
+ * @param source - The source application tag for analytics purposes ("agent", "cli", "server", etc).
  * @param version - The version to fetch. If no `version` is provided, defaults to the `latest` version.
  * @returns - The manifest for the specified or latest version.
  */
-export async function fetchVersionManifest(version?: string): Promise<ReleaseManifest> {
-  let manifest = releaseManifests.get(version ?? 'latest');
-  if (!manifest) {
-    const versionTag = version ? `tags/v${version}` : 'latest';
-    const res = await fetch(`${GITHUB_RELEASES_URL}/${versionTag}`);
-    if (res.status !== 200) {
-      let message: string | undefined;
-      try {
-        message = ((await res.json()) as { message: string }).message;
-      } catch (err) {
-        console.error(`Failed to parse message from body: ${normalizeErrorString(err)}`);
-      }
-      throw new Error(
-        `Received status code ${res.status} while fetching manifest for version '${version ?? 'latest'}'. Message: ${message}`
-      );
-    }
-    const response = (await res.json()) as ReleaseManifest;
-    assertReleaseManifest(response);
-    manifest = response;
-    releaseManifests.set(version ?? 'latest', manifest);
-    if (!version) {
-      releaseManifests.set(manifest.tag_name.slice(1), manifest);
-    }
+export async function fetchVersionManifest(source: string, version?: string): Promise<ReleaseManifest> {
+  const versionsManifest = await fetchVersionsManifest(source);
+  const allVersions = versionsManifest.versions;
+  const release = version === 'latest' ? allVersions[0] : allVersions.find((v) => v.version === version);
+  if (!release) {
+    throw new Error(`Version ${version} not found in versions manifest`);
   }
-  return manifest;
+  return release;
 }
 
 /**
@@ -86,21 +109,10 @@ export async function checkIfValidMedplumVersion(version: string): Promise<boole
   if (!isValidMedplumSemver(version)) {
     return false;
   }
-  try {
-    await fetchVersionManifest(version);
-  } catch (_err) {
-    return false;
-  }
+  // try {
+  //   await fetchVersionManifest(version);
+  // } catch (_err) {
+  //   return false;
+  // }
   return true;
-}
-
-/**
- * @returns A version string corresponding to the latest Medplum release version.
- */
-export async function fetchLatestVersionString(): Promise<string> {
-  const latest = await fetchVersionManifest();
-  if (!latest.tag_name.startsWith('v')) {
-    throw new Error(`Invalid release name found. Release tag '${latest.tag_name}' did not start with 'v'`);
-  }
-  return latest.tag_name.slice(1);
 }

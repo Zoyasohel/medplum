@@ -1,4 +1,4 @@
-import { fetchVersionManifest, ReleaseManifest } from '@medplum/core';
+import { ReleaseManifest, VersionsManifest } from '@medplum/core';
 import { createWriteStream } from 'node:fs';
 import { platform } from 'node:os';
 import { resolve } from 'node:path';
@@ -12,8 +12,8 @@ export const UPGRADER_LOG_PATH = resolve(
 );
 export const RELEASES_PATH = resolve(__dirname);
 
-export async function downloadRelease(version: string, path: string): Promise<void> {
-  const release = await fetchVersionManifest(version);
+export async function downloadRelease(manifest: VersionsManifest, version: string, path: string): Promise<void> {
+  const release = manifest.versions.find((v) => v.version === version) as ReleaseManifest;
 
   // Get download url
   const downloadUrl = parseDownloadUrl(release, platform());

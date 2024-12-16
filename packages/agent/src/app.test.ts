@@ -44,7 +44,7 @@ describe('App', () => {
   let medplum: MockClient;
 
   beforeEach(async () => {
-    console.log = jest.fn();
+    // console.log = jest.fn();
     medplum = new MockClient();
     medplum.router.router.add('POST', ':resourceType/:id/$execute', async () => {
       return [allOk, {} as Resource];
@@ -1478,9 +1478,9 @@ describe('App', () => {
       console.log = originalConsoleLog;
     });
 
-    test('Upgrade -- Version specified', async () => {
+    test.only('Upgrade -- Version specified', async () => {
       const originalConsoleLog = console.log;
-      console.log = jest.fn();
+      // console.log = jest.fn();
 
       let child!: MockChildProcess;
 
@@ -1554,6 +1554,8 @@ describe('App', () => {
       }
 
       const callback = getReferenceString(agent) + '-' + randomUUID();
+
+      console.log('CODY send upgrade request');
 
       state.mySocket.send(
         JSON.stringify({

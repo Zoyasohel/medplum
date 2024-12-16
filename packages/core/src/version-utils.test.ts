@@ -1,12 +1,10 @@
 import {
   assertReleaseManifest,
   checkIfValidMedplumVersion,
-  clearReleaseCache,
-  fetchLatestVersionString,
   fetchVersionManifest,
-  GITHUB_RELEASES_URL,
   isValidMedplumSemver,
   ReleaseManifest,
+  VersionsManifest,
 } from './version-utils';
 
 test('isValidMedplumSemver', () => {
@@ -22,6 +20,7 @@ test('isValidMedplumSemver', () => {
 test('assertReleaseManifest', () => {
   expect(() =>
     assertReleaseManifest({
+      version: '3.1.6',
       tag_name: 'v3.1.6',
       assets: [{ name: 'medplum-agent-3.1.6-linux', browser_download_url: 'https://example.com' }],
     } satisfies ReleaseManifest)
@@ -59,10 +58,6 @@ test('assertReleaseManifest', () => {
 describe('checkIfValidMedplumVersion', () => {
   beforeAll(() => {
     globalThis.fetch = jest.fn();
-  });
-
-  beforeEach(() => {
-    clearReleaseCache();
   });
 
   test('Invalid version format', async () => {
@@ -112,20 +107,20 @@ describe('checkIfValidMedplumVersion', () => {
 });
 
 describe('fetchVersionManifest', () => {
-  beforeEach(() => {
-    clearReleaseCache();
-  });
-
   test('Without version specified', async () => {
     const manifest = {
-      tag_name: 'v3.1.6',
-      assets: [
+      versions: [
         {
-          name: 'medplum-agent-3.1.6-linux',
-          browser_download_url: 'https://example.com',
+          tag_name: 'v3.1.6',
+          assets: [
+            {
+              name: 'medplum-agent-3.1.6-linux',
+              browser_download_url: 'https://example.com',
+            },
+          ],
         },
       ],
-    } as ReleaseManifest;
+    } as VersionsManifest;
     const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(
       jest.fn(async () => {
         return Promise.resolve({
@@ -136,43 +131,9 @@ describe('fetchVersionManifest', () => {
         });
       }) as unknown as typeof globalThis.fetch
     );
-    await expect(fetchVersionManifest()).resolves.toMatchObject<ReleaseManifest>(manifest);
+    await expect(fetchVersionManifest('test')).resolves.toMatchObject<ReleaseManifest>(manifest.versions[0]);
     // Should be called with latest
-    expect(fetchSpy).toHaveBeenLastCalledWith(`${GITHUB_RELEASES_URL}/latest`);
-    // Call again to make sure we don't refetch
-    fetchSpy.mockClear();
-    await expect(fetchVersionManifest()).resolves.toMatchObject<ReleaseManifest>(manifest);
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
-  });
-
-  test('With version specified', async () => {
-    const manifest = {
-      tag_name: 'v3.1.6',
-      assets: [
-        {
-          name: 'medplum-agent-3.1.6-linux',
-          browser_download_url: 'https://example.com',
-        },
-      ],
-    } as ReleaseManifest;
-    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(
-      jest.fn(async () => {
-        return Promise.resolve({
-          status: 200,
-          json: async () => {
-            return manifest;
-          },
-        });
-      }) as unknown as typeof globalThis.fetch
-    );
-    await expect(fetchVersionManifest('3.1.6')).resolves.toMatchObject<ReleaseManifest>(manifest);
-    // Should be called with latest
-    expect(fetchSpy).toHaveBeenLastCalledWith(`${GITHUB_RELEASES_URL}/tags/v3.1.6`);
-    // Call again to make sure we don't refetch
-    fetchSpy.mockClear();
-    await expect(fetchVersionManifest('3.1.6')).resolves.toMatchObject<ReleaseManifest>(manifest);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenLastCalledWith('https://meta.medplum.com/versions.json?v=&s=test');
     fetchSpy.mockRestore();
   });
 
@@ -198,63 +159,7 @@ describe('fetchVersionManifest', () => {
       }) as unknown as typeof globalThis.fetch
     );
     await expect(fetchVersionManifest('3.1.6')).rejects.toThrow(
-      "Received status code 404 while fetching manifest for version '3.1.6'. Message: Not Found"
-    );
-    fetchSpy.mockRestore();
-  });
-});
-
-describe('fetchLatestVersionString', () => {
-  beforeEach(() => {
-    clearReleaseCache();
-  });
-
-  test('Successful', async () => {
-    const manifest = {
-      tag_name: 'v3.1.6',
-      assets: [
-        {
-          name: 'medplum-agent-3.1.6-linux',
-          browser_download_url: 'https://example.com',
-        },
-      ],
-    } as ReleaseManifest;
-    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(
-      jest.fn(async () => {
-        return Promise.resolve({
-          status: 200,
-          json: async () => {
-            return manifest;
-          },
-        });
-      }) as unknown as typeof globalThis.fetch
-    );
-    await expect(fetchLatestVersionString()).resolves.toStrictEqual('3.1.6');
-    fetchSpy.mockRestore();
-  });
-
-  test('Invalid latest release', async () => {
-    const manifest = {
-      tag_name: 'canary',
-      assets: [
-        {
-          name: 'medplum-agent-canary-linux',
-          browser_download_url: 'https://example.com',
-        },
-      ],
-    } as ReleaseManifest;
-    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(
-      jest.fn(async () => {
-        return Promise.resolve({
-          status: 200,
-          json: async () => {
-            return manifest;
-          },
-        });
-      }) as unknown as typeof globalThis.fetch
-    );
-    await expect(fetchLatestVersionString()).rejects.toThrow(
-      "Invalid release name found. Release tag 'canary' did not start with 'v'"
+      'Received status code 404 while fetching versions manifest. Message: Not Found'
     );
     fetchSpy.mockRestore();
   });

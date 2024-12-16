@@ -1,4 +1,4 @@
-import { fetchLatestVersionString, isValidMedplumSemver, Logger, normalizeErrorString } from '@medplum/core';
+import { fetchVersionsManifest, isValidMedplumSemver, Logger, normalizeErrorString } from '@medplum/core';
 import { execSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { platform } from 'node:os';
@@ -34,14 +34,16 @@ export async function upgraderMain(argv: string[]): Promise<void> {
   if (argv[3] && !isValidMedplumSemver(argv[3])) {
     throw new Error('Invalid version specified');
   }
-  const version = argv[3] ?? (await fetchLatestVersionString());
+
+  const manifest = await fetchVersionsManifest('agent');
+  const version = argv[3] ?? manifest.versions[0].version;
   const binPath = getReleaseBinPath(version);
 
   // If release in not locally downloaded, download it first
   if (!existsSync(binPath)) {
     // Download release
     globalLogger.info(`Could not find binary at "${binPath}". Downloading release from GitHub...`);
-    await downloadRelease(version, binPath);
+    await downloadRelease(manifest, version, binPath);
     globalLogger.info('Release successfully downloaded');
   }
 

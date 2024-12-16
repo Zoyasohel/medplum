@@ -1,4 +1,3 @@
-import { clearReleaseCache } from '@medplum/core';
 import child_process from 'node:child_process';
 import fs from 'node:fs';
 import os, { platform } from 'node:os';
@@ -40,10 +39,6 @@ describe('Upgrader', () => {
 
     afterAll(() => {
       platformSpy.mockRestore();
-    });
-
-    beforeEach(() => {
-      clearReleaseCache();
     });
 
     test.each([false, true])('Happy path -- installer downloaded: %s', async (installerDownloaded) => {
@@ -159,7 +154,7 @@ describe('Upgrader', () => {
       const originalConsoleLog = console.log;
       console.log = jest.fn();
 
-      const fetchSpy = mockFetchForUpgrader('3.1.5');
+      const fetchSpy = mockFetchForUpgrader();
       const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockImplementation(() => false);
       const spawnSyncSpy = jest.spyOn(child_process, 'spawnSync').mockImplementation(
         jest.fn(() => {

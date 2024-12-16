@@ -1,4 +1,4 @@
-import { GITHUB_RELEASES_URL, ReleaseManifest, clearReleaseCache } from '@medplum/core';
+import { fetchVersionsManifest, ReleaseManifest, VersionsManifest } from '@medplum/core';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import { resolve } from 'node:path';
@@ -21,6 +21,7 @@ describe.each(ALL_PLATFORMS_LIST)('Upgrader Utils -- All Platforms -- %s', (_pla
 
   test('parseDownloadUrl', () => {
     const manifest = {
+      version: '3.1.6',
       tag_name: 'v3.1.6',
       assets: [
         {
@@ -75,24 +76,25 @@ describe.each(VALID_PLATFORMS_LIST)('Upgrader Utils -- Valid Platforms -- %s', (
       rmSync(resolve(__dirname, 'tmp'), { recursive: true, force: true });
     });
 
-    beforeEach(() => {
-      clearReleaseCache();
-    });
-
     test('Happy path', async () => {
       const manifest = {
-        tag_name: 'v3.1.6',
-        assets: [
+        versions: [
           {
-            name: 'medplum-agent-3.1.6-linux',
-            browser_download_url: 'https://example.com/linux',
-          },
-          {
-            name: 'medplum-agent-installer-3.1.6-windows.exe',
-            browser_download_url: 'https://example.com/win32',
+            version: '3.1.6',
+            tag_name: 'v3.1.6',
+            assets: [
+              {
+                name: 'medplum-agent-3.1.6-linux',
+                browser_download_url: 'https://example.com/linux',
+              },
+              {
+                name: 'medplum-agent-installer-3.1.6-windows.exe',
+                browser_download_url: 'https://example.com/win32',
+              },
+            ],
           },
         ],
-      } satisfies ReleaseManifest;
+      } satisfies VersionsManifest;
 
       let count = 0;
 
@@ -152,8 +154,9 @@ describe.each(VALID_PLATFORMS_LIST)('Upgrader Utils -- Valid Platforms -- %s', (
         })
       );
 
-      await downloadRelease('3.1.6', resolve(__dirname, 'tmp', 'test-release-binary'));
-      expect(fetchSpy).toHaveBeenNthCalledWith(1, `${GITHUB_RELEASES_URL}/tags/v3.1.6`);
+      await fetchVersionsManifest('agent');
+      await downloadRelease(manifest, '3.1.6', resolve(__dirname, 'tmp', 'test-release-binary'));
+      expect(fetchSpy).toHaveBeenNthCalledWith(1, expect.stringContaining('https://meta.medplum.com/versions.json'));
       expect(fetchSpy).toHaveBeenLastCalledWith(`https://example.com/${_platform}`);
       expect(readFileSync(resolve(__dirname, 'tmp', 'test-release-binary'), { encoding: 'utf-8' })).toStrictEqual(
         'Hello, Medplum!'

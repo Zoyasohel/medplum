@@ -14,7 +14,7 @@ import {
   MedplumClient,
   ReconnectingWebSocket,
   checkIfValidMedplumVersion,
-  fetchLatestVersionString,
+  fetchVersionsManifest,
   isValidHostname,
   normalizeErrorString,
 } from '@medplum/core';
@@ -584,6 +584,8 @@ export class App {
   }
 
   private async tryUpgradeAgent(message: AgentUpgradeRequest): Promise<void> {
+    console.log('CODY tryUpgradeAgent');
+
     if (platform() !== 'win32') {
       const errMsg = 'Auto-upgrading is currently only supported on Windows';
       this.log.error(errMsg);
@@ -595,11 +597,15 @@ export class App {
       return;
     }
 
+    const manifest = await fetchVersionsManifest('agent');
+    const latestVersion = manifest.versions[0].version;
+    const targetVersion = message.version ?? latestVersion;
+    const versionTag = `v${targetVersion}`;
+
     let child: ChildProcess;
 
     // If there is an explicit version, check if it's valid
     if (message.version && !(await checkIfValidMedplumVersion(message.version))) {
-      const versionTag = message.version ? `v${message.version}` : 'latest';
       const errMsg = `Error during upgrading to version '${versionTag}'. '${message.version}' is not a valid version`;
       this.log.error(errMsg);
       await this.sendToWebSocket({
@@ -636,7 +642,6 @@ export class App {
         this.log.error(normalizeErrorString(err));
       });
     } catch (err) {
-      const versionTag = message.version ? `v${message.version}` : 'latest';
       const errMsg = `Error during upgrading to version '${versionTag}': ${normalizeErrorString(err)}`;
       this.log.error(errMsg);
       await this.sendToWebSocket({
@@ -653,8 +658,6 @@ export class App {
       this.log.info('Successfully stopped agent network services');
 
       // Write a manifest file
-      const targetVersion = message.version ?? (await fetchLatestVersionString());
-
       this.log.info('Writing upgrade manifest...', { previousVersion: MEDPLUM_VERSION, targetVersion });
       writeFileSync(
         UPGRADE_MANIFEST_PATH,
