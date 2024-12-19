@@ -2,6 +2,7 @@ import { Pool, PoolClient } from 'pg';
 import { MedplumDatabaseConfig, MedplumServerConfig } from './config';
 import { globalLogger } from './logger';
 import * as migrations from './migrations/schema';
+import { sleep } from '@medplum/core';
 
 export enum DatabaseMode {
   READER = 'reader',
@@ -93,23 +94,61 @@ async function runMigrations(pool: Pool): Promise<void> {
   let client: PoolClient | undefined;
   try {
     client = await pool.connect();
-    await client.query('SELECT pg_advisory_lock($1)', [locks.migration]);
+    await acquireAdvisoryLock(client, locks.migration);
     await client.query(`SET statement_timeout TO 0`); // Disable timeout for migrations AFTER getting lock
     await migrate(client);
   } catch (err: any) {
     globalLogger.error('Database schema migration error', err);
     if (client) {
-      await client.query('SELECT pg_advisory_unlock($1)', [locks.migration]);
+      await releaseAdvisoryLock(client, locks.migration);
       client.release(err);
       client = undefined;
     }
   } finally {
     if (client) {
-      await client.query('SELECT pg_advisory_unlock($1)', [locks.migration]);
+      await releaseAdvisoryLock(client, locks.migration);
       client.release(true); // Ensure migration connection is torn down and not re-used
       client = undefined;
     }
   }
+}
+
+type AcquireAdvisoryLockOptions = {
+  maxAttempts?: number;
+  retryDelayMs?: number;
+};
+
+export async function acquireAdvisoryLock(
+  client: PoolClient,
+  lockId: number,
+  options?: AcquireAdvisoryLockOptions
+): Promise<boolean> {
+  const retryDelayMs = options?.retryDelayMs ?? 2000;
+  const maxAttempts = options?.maxAttempts ?? 30;
+  let attempts = 0;
+  while (attempts < maxAttempts) {
+    try {
+      const result = await client.query('SELECT pg_try_advisory_lock($1)', [lockId]);
+      console.log(result.rows[0], result.rows[0].pg_try_advisory_lock);
+      if (result.rows[0].pg_try_advisory_lock) {
+        return true;
+      }
+    } catch (err) {
+      console.log('acquireAdvisoryLock error', err);
+    }
+    attempts++;
+    if (attempts === maxAttempts) {
+      return false;
+    }
+
+    await sleep(retryDelayMs);
+  }
+
+  return false;
+}
+
+export async function releaseAdvisoryLock(client: PoolClient, lockId: number): Promise<void> {
+  await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
 }
 
 async function migrate(client: PoolClient): Promise<void> {
